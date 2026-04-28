@@ -1,0 +1,6 @@
+Patient: David Chen, 34M
+Visit: Annual preventive care
+Vitals: BP 118/74, BMI 23.2
+Labs: Total cholesterol 182, LDL 98, HDL 58, Glucose 92, TSH 2.1. CBC normal.
+Assessment: Healthy male. All screening labs within normal limits.
+Plan: Continue current lifestyle. Annual flu vaccine given. Return in 1 year.

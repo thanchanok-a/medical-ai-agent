@@ -1,0 +1,7 @@
+Patient: Alex Johnson, 52M
+Visit: Diabetes follow-up
+Vitals: BP 138/86, Weight 198 lbs (up 4 lbs)
+Meds: Metformin 500mg BID, Lisinopril 10mg QD
+Labs: HbA1c 8.2%, Fasting glucose 186 mg/dL, eGFR 62
+Assessment: Type 2 DM suboptimal control. Early diabetic nephropathy. HTN not at goal.
+Plan: Increase Metformin to 1000mg BID. Add Empagliflozin 10mg QD. Recheck in 3 months.

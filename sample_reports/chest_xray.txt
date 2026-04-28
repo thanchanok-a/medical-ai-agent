@@ -1,0 +1,6 @@
+Patient: Maria Rodriguez, 67F
+Study: PA chest radiograph
+Indication: Progressive dyspnea, productive cough x 10 days
+Findings: Right lower lobe consolidation with air bronchograms. Small right pleural effusion. Increased interstitial markings bilaterally.
+Impression: Right lower lobe pneumonia. Small parapneumonic effusion.
+Recommendation: Urgent clinical evaluation. Consider sputum culture. Follow-up imaging in 4-6 weeks.
