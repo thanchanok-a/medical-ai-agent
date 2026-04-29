@@ -97,27 +97,29 @@ Question: {question}"""
 
 
 if __name__ == "__main__":
-    # Use real synthetic reports instead of placeholder patient
-    from synthetic_reports import REPORTS
+   # Test using the 3 sample report text files
+    sample_files = [
+        "chest_xray.txt",
+        "diabetes_followup.txt",
+        "routine_checkup.txt"
+    ]
 
-    # Print available keys so you can always check
-    print("Available report keys:")
-    for key in REPORTS.keys():
-        print(f"  - {key}")
+    print("Available sample reports:")
+    for file in sample_files:
+        print(f"  - {file}")
     print()
 
-    # Test on the chest X-ray — the most interesting case
-    # Use next() to find the key safely instead of hardcoding
-    chest_key = next(
-        (k for k in REPORTS if "chest" in k.lower() or "xray" in k.lower()),
-        None
-    )
+    # Test on chest_xray.txt first
+    test_file = "chest_xray.txt"
 
-    if chest_key:
-        test_report = REPORTS[chest_key]["text"]
-        expected    = REPORTS[chest_key]["urgency_true"]
+    if not os.path.exists(test_file):
+        print(f"{test_file} not found.")
+        print("Make sure the file is in the same folder as medgemma_client.py")
+    else:
+        with open(test_file, "r", encoding="utf-8") as f:
+            test_report = f.read()
 
-        print(f"Testing: {chest_key}  |  Expected urgency: {expected}")
+        print(f"Testing: {test_file}")
         print("-" * 50)
 
         result = analyze_medical_text(test_report)
@@ -125,12 +127,11 @@ if __name__ == "__main__":
         print(result)
 
         print("\n" + "-" * 50)
+
         qa_result = medical_qa(
             test_report,
             "Is this patient's condition serious? What should they do right now?"
         )
+
         print("\nQ&A Test:")
         print(qa_result)
-    else:
-        print("chest_xray report not found — available keys printed above.")
-        print("Update the key name in __main__ to match one from the list.")

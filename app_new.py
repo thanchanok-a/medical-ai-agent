@@ -1,12 +1,10 @@
 # app.py — Medical AI Explanation Agent
-# Streamlit web application using uploaded/local text report files
-
-import os
-from collections import Counter
+# Streamlit web application with 20 synthetic reports
 
 import streamlit as st
 from claude_agent import full_pipeline_explain, full_pipeline_qa
-
+from mcp_tools import filesystem_tool_list_reports, filesystem_tool_load_report
+from synthetic_reports import REPORTS
 
 # ── Page Config ───────────────────────────────────────────────
 st.set_page_config(
@@ -15,7 +13,6 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
-
 
 # ── Custom CSS ────────────────────────────────────────────────
 st.markdown("""
@@ -32,108 +29,22 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-
-# ── Report Files ──────────────────────────────────────────────
-# Put these .txt files in the same folder as app.py OR inside sample_reports/
-REPORT_FILES = {
-    "Chest X-Ray — High": {
-        "filename": "chest_xray.txt",
-        "domain": "Radiology / Pneumonia",
-        "urgency_true": "High",
-    },
-    "Diabetes Follow-Up — Moderate": {
-        "filename": "diabetes_followup.txt",
-        "domain": "Endocrinology / Diabetes",
-        "urgency_true": "Moderate",
-    },
-    "Routine Checkup — Low": {
-        "filename": "routine_checkup.txt",
-        "domain": "Preventive Care",
-        "urgency_true": "Low",
-    },
-}
-
-
-def find_report_path(filename: str) -> str | None:
-    """Find report file either beside app.py or inside sample_reports/."""
-    possible_paths = [
-        filename,
-        os.path.join("sample_reports", filename),
-    ]
-    for path in possible_paths:
-        if os.path.exists(path):
-            return path
-    return None
-
-
-def load_report_text(filename: str) -> str:
-    """Load a report text file safely."""
-    path = find_report_path(filename)
-    if path is None:
-        raise FileNotFoundError(
-            f"Could not find {filename}. Put it beside app.py or inside sample_reports/."
-        )
-    with open(path, "r", encoding="utf-8") as file:
-        return file.read()
-
-
-def get_word_count(text: str) -> int:
-    return len(text.split())
-
-
-def has_lab_values(text: str) -> bool:
-    keywords = ["labs", "hba1c", "glucose", "egfr", "ldl", "hdl", "tsh", "cbc", "cholesterol"]
-    text_lower = text.lower()
-    return any(keyword in text_lower for keyword in keywords)
-
-
-def has_medications(text: str) -> bool:
-    keywords = ["meds", "metformin", "lisinopril", "empagliflozin", "medications"]
-    text_lower = text.lower()
-    return any(keyword in text_lower for keyword in keywords)
-
-
-def detect_urgency_from_explanation(explanation: str) -> tuple[str, str]:
-    """Infer urgency label and CSS class from Claude explanation text."""
-    text_lower = explanation.lower()
-
-    if any(word in text_lower for word in ["high", "urgent", "emergency", "immediately", "today", "critical"]):
-        return "🔴 HIGH", "urgency-high"
-    if any(word in text_lower for word in ["moderate", "soon", "follow up", "follow-up"]):
-        return "🟡 MODERATE", "urgency-moderate"
-    return "🟢 LOW", "urgency-low"
-
-
 # ── Build Report Lookups ──────────────────────────────────────
+# Display label → report text
 SAMPLE_REPORTS = {}
+# Display label → full metadata dict
 REPORT_METADATA = {}
 
-for label, data in REPORT_FILES.items():
-    try:
-        text = load_report_text(data["filename"])
-    except FileNotFoundError:
-        text = ""
-
-    SAMPLE_REPORTS[label] = text
-    REPORT_METADATA[label] = {
-        "domain": data["domain"],
-        "urgency_true": data["urgency_true"],
-        "filename": data["filename"],
-        "word_count": get_word_count(text),
-        "has_lab_values": has_lab_values(text),
-        "has_medications": has_medications(text),
-        "loaded": bool(text.strip()),
-    }
-
+for report_id, data in REPORTS.items():
+    label = f"{data['domain']} — {data['urgency_true']}"
+    SAMPLE_REPORTS[label]  = data["text"]
+    REPORT_METADATA[label] = data
 
 # ── Session State Init ────────────────────────────────────────
-if "report_text" not in st.session_state:
+if "report_text"  not in st.session_state:
     st.session_state.report_text = ""
 if "last_analysis" not in st.session_state:
     st.session_state.last_analysis = None
-if "question_text" not in st.session_state:
-    st.session_state.question_text = ""
-
 
 # ══════════════════════════════════════════════════════════════
 # SIDEBAR
@@ -143,28 +54,29 @@ with st.sidebar:
     st.caption("MedGemma Impact Challenge · Grad AI Class")
     st.divider()
 
-    st.subheader("📋 Report Files")
-    st.caption(f"{len(REPORT_FILES)} local report files")
+    # ── Urgency filter ────────────────────────────────────────
+    st.subheader("📋 Sample Reports")
+    st.caption(f"{len(REPORTS)} synthetic reports · 12 clinical domains")
 
     urgency_filter = st.radio(
         "Filter by urgency level",
-        ["All", "🟢 Low", "🟡 Moderate", "🔴 High"],
+        ["All 20", "🟢 Low (7)", "🟡 Moderate (7)", "🔴 High (6)"],
         index=0
     )
 
+    # Build filtered dropdown
     filter_map = {
-        "All": None,
-        "🟢 Low": "Low",
-        "🟡 Moderate": "Moderate",
-        "🔴 High": "High",
+        "All 20":        None,
+        "🟢 Low (7)":    "Low",
+        "🟡 Moderate (7)": "Moderate",
+        "🔴 High (6)":   "High",
     }
     selected_urgency = filter_map[urgency_filter]
 
     if selected_urgency:
         filtered_reports = {
-            label: text
-            for label, text in SAMPLE_REPORTS.items()
-            if REPORT_METADATA[label]["urgency_true"] == selected_urgency
+            k: v for k, v in SAMPLE_REPORTS.items()
+            if selected_urgency in k
         }
     else:
         filtered_reports = SAMPLE_REPORTS
@@ -175,11 +87,10 @@ with st.sidebar:
         index=0
     )
 
+    # Show metadata preview
     if selected_label:
         meta = REPORT_METADATA[selected_label]
-        loaded_icon = "✅" if meta["loaded"] else "❌"
         st.caption(
-            f"**File:** `{meta['filename']}` {loaded_icon}  \n"
             f"**Domain:** {meta['domain']}  \n"
             f"**Words:** {meta['word_count']}  \n"
             f"**Has labs:** {'Yes' if meta['has_lab_values'] else 'No'}  \n"
@@ -187,28 +98,26 @@ with st.sidebar:
         )
 
     if st.button("📂 Load This Report", use_container_width=True, type="primary"):
-        selected_text = filtered_reports[selected_label]
-        if not selected_text.strip():
-            st.error("Report file not found or empty. Check that the .txt file is in your project.")
-        else:
-            st.session_state.report_text = selected_text
-            st.session_state.last_analysis = None
-            st.success("Report loaded ✓")
+        st.session_state.report_text = filtered_reports[selected_label]
+        st.session_state.last_analysis = None
+        st.success("Report loaded ✓")
 
     st.divider()
+
+    # ── Ethics notice ─────────────────────────────────────────
     st.markdown("""
     <div class='disclaimer'>
     ⚠️ <strong>Research Prototype Only</strong><br>
-    These reports are for demonstration and education only.
+    All sample reports are entirely fictional.
     This is NOT medical advice. Not for clinical use.
     </div>
     """, unsafe_allow_html=True)
 
+    # ── Live app link ─────────────────────────────────────────
     st.divider()
     st.caption("🌐 Live App")
     st.markdown("[medical-ai-agent.streamlit.app]"
                 "(https://medical-ai-agent-ayjwazwnbg4pfbaknekmzr.streamlit.app)")
-
 
 # ══════════════════════════════════════════════════════════════
 # MAIN AREA — 3 TABS
@@ -222,7 +131,6 @@ tab1, tab2, tab3 = st.tabs([
     "📊 About & Architecture"
 ])
 
-
 # ──────────────────────────────────────────────────────────────
 # TAB 1: REPORT EXPLAINER
 # ──────────────────────────────────────────────────────────────
@@ -235,10 +143,11 @@ with tab1:
             "Medical report text",
             value=st.session_state.report_text,
             height=280,
-            placeholder="Paste a medical report here, or load a report from the sidebar...",
+            placeholder="Paste a medical report here, or load a sample from the sidebar...",
             label_visibility="collapsed"
         )
 
+        # Update session state when user types
         st.session_state.report_text = report_text
 
         analyze_btn = st.button(
@@ -263,7 +172,16 @@ with tab1:
         if st.session_state.last_analysis:
             result = st.session_state.last_analysis
             explanation = result["claude_explanation"]
-            urgency, css = detect_urgency_from_explanation(explanation)
+            text_lower  = explanation.lower()
+
+            # Urgency indicator
+            if any(w in text_lower for w in ["high", "urgent", "emergency",
+                                              "immediately", "today"]):
+                urgency, css = "🔴 HIGH", "urgency-high"
+            elif "moderate" in text_lower or "soon" in text_lower:
+                urgency, css = "🟡 MODERATE", "urgency-moderate"
+            else:
+                urgency, css = "🟢 LOW", "urgency-low"
 
             st.markdown(
                 f"<div class='{css}'><strong>Urgency: {urgency}</strong></div>",
@@ -273,12 +191,12 @@ with tab1:
             st.markdown("**Patient-Friendly Explanation**")
             st.write(explanation)
 
-            with st.expander("🧬 Clinical Analysis Layer"):
+            with st.expander("🧬 Clinical Analysis (MedGemma layer)"):
                 st.text(result["medgemma_analysis"])
 
         else:
-            st.info("Load a report from the sidebar or paste a report, then click Analyze Report.")
-
+            st.info("Load a sample from the sidebar or paste a report, "
+                    "then click Analyze Report.")
 
 # ──────────────────────────────────────────────────────────────
 # TAB 2: Q&A
@@ -286,6 +204,7 @@ with tab1:
 with tab2:
     st.subheader("Ask a Question About a Report")
 
+    # Use whatever is loaded in session state
     qa_report = st.text_area(
         "Medical report (auto-filled from sidebar)",
         value=st.session_state.report_text,
@@ -293,6 +212,7 @@ with tab2:
         key="qa_report_input"
     )
 
+    # Quick question buttons
     st.caption("Quick questions:")
     qcols = st.columns(4)
     quick_questions = [
@@ -301,15 +221,14 @@ with tab2:
         "What medications are mentioned?",
         "When should I see a doctor?",
     ]
-
-    for i, (col, quick_question) in enumerate(zip(qcols, quick_questions)):
+    for i, (col, q) in enumerate(zip(qcols, quick_questions)):
         with col:
-            if st.button(quick_question, key=f"quick_{i}", use_container_width=True):
-                st.session_state.question_text = quick_question
+            if st.button(q, key=f"quick_{i}", use_container_width=True):
+                st.session_state.question_text = q
 
     question = st.text_input(
         "Your question",
-        value=st.session_state.question_text,
+        value=st.session_state.get("question_text", ""),
         placeholder="Type your question here..."
     )
     st.session_state.question_text = question
@@ -327,12 +246,10 @@ with tab2:
                 st.divider()
                 st.markdown("**Answer (Patient-Friendly)**")
                 st.write(result["claude_explanation"])
-
-                with st.expander("🧬 Clinical Answer Layer"):
+                with st.expander("🧬 Clinical Answer (MedGemma layer)"):
                     st.text(result["medgemma_answer"])
             except Exception as e:
                 st.error(f"Error: {e}")
-
 
 # ──────────────────────────────────────────────────────────────
 # TAB 3: ABOUT
@@ -345,45 +262,46 @@ with tab3:
         st.markdown("""
         **Two-layer AI pipeline:**
 
-        1. **Streamlit UI** — user selects or pastes a report
-        2. **MCP tool layer** (`mcp_tools.py`) — represents filesystem and Python execution tools
+        1. **MCP filesystem_tool** — loads report from disk
+        2. **MCP python_exec_tool** — triggers clinical analysis
         3. **Clinical layer** (`medgemma_client.py`)
-           - Extracts clinical findings
-           - Produces technical medical analysis
-           - Can be connected to MedGemma / Hugging Face inference
+           - Uses Claude with `MEDICAL_SYSTEM_PROMPT`
+           - Writes like a doctor: ICD codes, clinical shorthand
+           - Substitute for MedGemma API (requires GPU)
         4. **Communication layer** (`claude_agent.py`)
-           - Converts technical findings into patient-friendly language
-           - Adds plain-English explanation, urgency framing, and questions for doctors
-        5. **Safety layer**
-           - Educational disclaimer
-           - Encourages consultation with qualified healthcare providers
+           - Uses Claude with `CLAUDE_SYSTEM_PROMPT`
+           - Translates clinical output to plain English
+           - Adds urgency framing and patient action steps
+        5. **Streamlit UI** — displays results to patient
 
-        **Model comparison goal:** compare lightweight MedGemma 4B output against a larger MedGemma model for clinical completeness, hallucination rate, clarity, and runtime.
+        **Real MedGemma 4B** inference demonstrated separately in
+        Google Colab (Tesla T4 GPU, 15.6 GB VRAM).
         """)
 
     with col2:
         st.subheader("Dataset")
-
-        urgency_counts = Counter(meta["urgency_true"] for meta in REPORT_METADATA.values())
-        domain_counts = Counter(meta["domain"] for meta in REPORT_METADATA.values())
-
         st.markdown(f"""
-        **{len(REPORT_FILES)} demonstration reports** loaded from text files.
-
-        | Urgency | Count |
-        |---------|-------|
-        | 🟢 Low | {urgency_counts['Low']} |
-        | 🟡 Moderate | {urgency_counts['Moderate']} |
-        | 🔴 High | {urgency_counts['High']} |
+        **{len(REPORTS)} synthetic reports** across 12 clinical domains:
         """)
 
-        st.markdown("**Clinical domains:**")
-        for domain, count in domain_counts.items():
-            st.write(f"- {domain}: {count}")
+        # Show breakdown table
+        from collections import Counter
+        urgency_counts = Counter(d["urgency_true"] for d in REPORTS.values())
+        domain_counts  = Counter(d["domain"] for d in REPORTS.values())
+
+        st.markdown(f"""
+        | Urgency | Count |
+        |---------|-------|
+        | 🟢 Low     | {urgency_counts['Low']} |
+        | 🟡 Moderate | {urgency_counts['Moderate']} |
+        | 🔴 High    | {urgency_counts['High']} |
+        """)
+
+        st.caption("All reports are entirely fictional — for research only.")
 
         st.subheader("Ethics")
         st.markdown("""
         ⚠️ **NOT medical advice.** Research prototype only.
-        Real deployment would require HIPAA compliance, clinician validation,
-        privacy controls, bias testing, and safety evaluation.
+        All sample reports are fictional. Real deployment would require
+        HIPAA compliance, clinician validation, and fairness evaluation.
         """)
